@@ -38,6 +38,20 @@ class BitVector {
   // build builds indexes for select.
   void build();
 
+  // rank returns the number of 0-bits in the range [0, i).
+  uint64_t rank(uint64_t i) const {
+    uint64_t word_id = i / 64;
+    uint64_t bit_id = i % 64;
+    uint64_t rank_id = word_id / 4;
+    uint64_t rel_id = word_id % 4;
+    uint64_t n = ranks_[rank_id].abs();
+    if (rel_id != 0) {
+      n += ranks_[rank_id].rels[rel_id - 1];
+    }
+    n += __builtin_popcountll(~words_[word_id] & ((1UL << bit_id) - 1));
+    return n;
+  }
+
   // select returns the position of the (i+1)-th 0-bit.
   uint64_t select(uint64_t i) const;
 
@@ -240,6 +254,7 @@ void TrieImpl::build() {
   for (uint64_t i = 0; i < levels_.size(); ++i) {
     Level &level = levels_[i];
     level.louds.build();
+    level.outs.build();
     offset += levels_[i].offset;
     level.offset = offset;
     size_ += level.size();
@@ -273,7 +288,7 @@ int64_t TrieImpl::lookup(const string &query) const {
   if (!level.outs.get(rank)) {
     return false;
   }
-  return level.offset + rank;
+  return level.offset + rank - level.outs.rank(rank);
 }
 
 Trie::Trie() : impl_(new TrieImpl) {}

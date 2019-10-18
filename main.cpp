@@ -31,13 +31,20 @@ int main() {
   cout << "#nodes = " << trie.n_nodes() << endl;
   cout << "size = " << trie.size() << " bytes" << endl;
 
+  vector<uint64_t> ids(keys.size());
+
   begin = high_resolution_clock::now();
   for (uint64_t i = 0; i < keys.size(); ++i) {
-    assert(trie.lookup(keys[i]) != -1);
+    ids[i] = trie.lookup(keys[i]);
   }
   end = high_resolution_clock::now();
   elapsed = (double)duration_cast<nanoseconds>(end - begin).count();
   cout << "seq. lookup = " << (elapsed / keys.size()) << " ns/key" << endl;
+
+  sort(ids.begin(), ids.end());
+  for (uint64_t i = 0; i < ids.size(); ++i) {
+    assert(ids[i] == i);
+  }
 
   random_shuffle(keys.begin(), keys.end());
 
