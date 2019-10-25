@@ -6,9 +6,6 @@
 #include <vector>
 
 namespace louds {
-
-using namespace std;
-
 namespace {
 
 class BitVector {
@@ -322,4 +319,3 @@ uint64_t Trie::size() const {
 }
 
 }  // namespace louds
-
