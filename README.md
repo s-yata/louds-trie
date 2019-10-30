@@ -34,3 +34,7 @@ size = 195899028 bytes
 seq. lookup = 499.932 ns/key
 rnd. lookup = 2802.41 ns/key
 ```
+
+## See also
+
+https://github.com/s-yata/louds-patricia
