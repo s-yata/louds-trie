@@ -19,20 +19,20 @@ $ make
 g++ -O2 -Wall -Wextra -march=native *.cpp -o louds-trie
 
 $ ./louds-trie < data/jawiki-20191001-all-titles-in-ns0.sorted
-build = 142.706 ns/key
+build = 135.789 ns/key
 #keys = 1887667
 #nodes = 18970273
-size = 28447025 bytes
-seq. lookup = 500.309 ns/key
-rnd. lookup = 1504.83 ns/key
+size = 28208993 bytes
+seq. lookup = 460.763 ns/key
+rnd. lookup = 1398.13 ns/key
 
 $ ./louds-trie < data/enwiki-20191001-all-titles-in-ns0.sorted
-build = 121.861 ns/key
+build = 123.173 ns/key
 #keys = 14837096
 #nodes = 130740728
-size = 195899028 bytes
-seq. lookup = 499.932 ns/key
-rnd. lookup = 2802.41 ns/key
+size = 194319332 bytes
+seq. lookup = 438.351 ns/key
+rnd. lookup = 2573.98 ns/key
 ```
 
 ## See also
