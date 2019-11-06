@@ -252,29 +252,29 @@ int64_t TrieImpl::lookup(const string &query) const {
     return false;
   }
   uint64_t node_id = 0;
-  uint64_t rank = 0;
   for (uint64_t i = 0; i < query.length(); ++i) {
     const Level &level = levels_[i + 1];
-    if (rank != 0) {
-      node_id = level.louds.select(rank - 1) + 1;
-      rank = node_id - rank;
+    uint64_t node_pos;
+    if (node_id != 0) {
+      node_pos = level.louds.select(node_id - 1) + 1;
+      node_id = node_pos - node_id;
     } else {
-      node_id = 0;
+      node_pos = 0;
     }
-    for (uint8_t byte = query[i]; ; ++node_id, ++rank) {
-      if (level.louds.get(node_id) || level.labels[rank] > byte) {
+    for (uint8_t byte = query[i]; ; ++node_pos, ++node_id) {
+      if (level.louds.get(node_pos) || level.labels[node_id] > byte) {
         return -1;
       }
-      if (level.labels[rank] == byte) {
+      if (level.labels[node_id] == byte) {
         break;
       }
     }
   }
   const Level &level = levels_[query.length()];
-  if (!level.outs.get(rank)) {
+  if (!level.outs.get(node_id)) {
     return false;
   }
-  return level.offset + level.outs.rank(rank);
+  return level.offset + level.outs.rank(node_id);
 }
 
 Trie::Trie() : impl_(new TrieImpl) {}
