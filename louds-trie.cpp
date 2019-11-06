@@ -8,61 +8,7 @@
 namespace louds {
 namespace {
 
-class BitVector {
- public:
-  BitVector() : words_(), ranks_(), selects_(), n_bits_(0) {}
-  ~BitVector() {}
-
-  uint64_t get(uint64_t i) const {
-    return (words_[i / 64] >> (i % 64)) & 1UL;
-  }
-  void set(uint64_t i, uint64_t bit) {
-    if (bit) {
-      words_[i / 64] |= (1UL << (i % 64));
-    } else {
-      words_[i / 64] &= ~(1UL << (i % 64));
-    }
-  }
-
-  void add(uint64_t bit) {
-    if (n_bits_ % 256 == 0) {
-      words_.resize((n_bits_ + 256) / 64);
-    }
-    set(n_bits_, bit);
-    ++n_bits_;
-  }
-
-  // build builds indexes for select.
-  void build();
-
-  // rank returns the number of 0-bits in the range [0, i).
-  uint64_t rank(uint64_t i) const {
-    uint64_t word_id = i / 64;
-    uint64_t bit_id = i % 64;
-    uint64_t rank_id = word_id / 4;
-    uint64_t rel_id = word_id % 4;
-    uint64_t n = ranks_[rank_id].abs();
-    if (rel_id != 0) {
-      n += ranks_[rank_id].rels[rel_id - 1];
-    }
-    n += __builtin_popcountll(~words_[word_id] & ((1UL << bit_id) - 1));
-    return n;
-  }
-
-  // select returns the position of the (i+1)-th 0-bit.
-  uint64_t select(uint64_t i) const;
-
-  uint64_t n_bits() const {
-    return n_bits_;
-  }
-  uint64_t size() const {
-    return sizeof(uint64_t) * words_.size()
-      + sizeof(Rank) * ranks_.size()
-      + sizeof(uint32_t) * selects_.size();
-  }
-
- private:
-  vector<uint64_t> words_;
+struct BitVector {
   struct Rank {
     uint32_t abs_hi;
     uint8_t abs_lo;
@@ -76,83 +22,126 @@ class BitVector {
       abs_lo = (uint8_t)abs;
     }
   };
-  vector<Rank> ranks_;
-  vector<uint32_t> selects_;
-  uint64_t n_bits_;
-};
 
-void BitVector::build() {
-  uint64_t n_blocks = words_.size() / 4;
-  uint64_t n_zeros = 0;
-  ranks_.resize(n_blocks + 1);
-  for (uint64_t block_id = 0; block_id < n_blocks; ++block_id) {
-    ranks_[block_id].set_abs(n_zeros);
-    for (uint64_t j = 0; j < 4; ++j) {
-      if (j != 0) {
-        uint64_t rel = n_zeros - ranks_[block_id].abs();
-        ranks_[block_id].rels[j - 1] = rel;
-      }
+  vector<uint64_t> words;
+  vector<Rank> ranks;
+  vector<uint32_t> selects;
+  uint64_t n_bits;
 
-      uint64_t word_id = (block_id * 4) + j;
-      uint64_t word = ~words_[word_id];
-      uint64_t n_pops = __builtin_popcountll(word);
-      uint64_t new_n_zeros = n_zeros + n_pops;
-      if (((n_zeros + 255) / 256) != ((new_n_zeros + 255) / 256)) {
-        uint64_t count = n_zeros;
-        while (word != 0) {
-          uint64_t pos = __builtin_ctzll(word);
-          if (count % 256 == 0) {
-            selects_.push_back(((word_id * 64) + pos) / 256);
-            break;
+  BitVector() : words(), ranks(), selects(), n_bits(0) {}
+
+  uint64_t get(uint64_t i) const {
+    return (words[i / 64] >> (i % 64)) & 1UL;
+  }
+  void set(uint64_t i, uint64_t bit) {
+    if (bit) {
+      words[i / 64] |= (1UL << (i % 64));
+    } else {
+      words[i / 64] &= ~(1UL << (i % 64));
+    }
+  }
+
+  void add(uint64_t bit) {
+    if (n_bits % 256 == 0) {
+      words.resize((n_bits + 256) / 64);
+    }
+    set(n_bits, bit);
+    ++n_bits;
+  }
+  // build builds indexes for rank and select.
+  void build() {
+    uint64_t n_blocks = words.size() / 4;
+    uint64_t n_ones = 0;
+    ranks.resize(n_blocks + 1);
+    for (uint64_t block_id = 0; block_id < n_blocks; ++block_id) {
+      ranks[block_id].set_abs(n_ones);
+      for (uint64_t j = 0; j < 4; ++j) {
+        if (j != 0) {
+          uint64_t rel = n_ones - ranks[block_id].abs();
+          ranks[block_id].rels[j - 1] = rel;
+        }
+
+        uint64_t word_id = (block_id * 4) + j;
+        uint64_t word = words[word_id];
+        uint64_t n_pops = __builtin_popcountll(word);
+        uint64_t new_n_ones = n_ones + n_pops;
+        if (((n_ones + 255) / 256) != ((new_n_ones + 255) / 256)) {
+          uint64_t count = n_ones;
+          while (word != 0) {
+            uint64_t pos = __builtin_ctzll(word);
+            if (count % 256 == 0) {
+              selects.push_back(((word_id * 64) + pos) / 256);
+              break;
+            }
+            word ^= 1UL << pos;
+            ++count;
           }
-          word ^= 1UL << pos;
-          ++count;
+        }
+        n_ones = new_n_ones;
+      }
+    }
+    ranks.back().set_abs(n_ones);
+    selects.push_back(words.size() * 64 / 256);
+  }
+
+  // rank returns the number of 1-bits in the range [0, i).
+  uint64_t rank(uint64_t i) const {
+    uint64_t word_id = i / 64;
+    uint64_t bit_id = i % 64;
+    uint64_t rank_id = word_id / 4;
+    uint64_t rel_id = word_id % 4;
+    uint64_t n = ranks[rank_id].abs();
+    if (rel_id != 0) {
+      n += ranks[rank_id].rels[rel_id - 1];
+    }
+    n += __builtin_popcountll(words[word_id] & ((1UL << bit_id) - 1));
+    return n;
+  }
+  // select returns the position of the (i+1)-th 1-bit.
+  uint64_t select(uint64_t i) const {
+    const uint64_t block_id = i / 256;
+    uint64_t begin = selects[block_id];
+    uint64_t end = selects[block_id + 1] + 1UL;
+    if (begin + 10 >= end) {
+      while (i >= ranks[begin + 1].abs()) {
+        ++begin;
+      }
+    } else {
+      while (begin + 1 < end) {
+        const uint64_t middle = (begin + end) / 2;
+        if (i < ranks[middle].abs()) {
+          end = middle;
+        } else {
+          begin = middle;
         }
       }
-      n_zeros = new_n_zeros;
     }
-  }
-  ranks_.back().set_abs(n_zeros);
-  selects_.push_back(words_.size() * 64 / 256);
-}
+    const uint64_t rank_id = begin;
+    i -= ranks[rank_id].abs();
 
-uint64_t BitVector::select(uint64_t i) const {
-  const uint64_t block_id = i / 256;
-  uint64_t begin = selects_[block_id];
-  uint64_t end = selects_[block_id + 1] + 1UL;
-  if (begin + 10 >= end) {
-    while (i >= ranks_[begin + 1].abs()) {
-      ++begin;
-    }
-  } else {
-    while (begin + 1 < end) {
-      const uint64_t middle = (begin + end) / 2;
-      if (i < ranks_[middle].abs()) {
-        end = middle;
-      } else {
-        begin = middle;
+    uint64_t word_id = rank_id * 4;
+    if (i < ranks[rank_id].rels[1]) {
+      if (i >= ranks[rank_id].rels[0]) {
+        word_id += 1;
+        i -= ranks[rank_id].rels[0];
       }
+    } else if (i < ranks[rank_id].rels[2]) {
+      word_id += 2;
+      i -= ranks[rank_id].rels[1];
+    } else {
+      word_id += 3;
+      i -= ranks[rank_id].rels[2];
     }
+    return (word_id * 64) + __builtin_ctzll(
+      _pdep_u64(1UL << i, words[word_id]));
   }
-  const uint64_t rank_id = begin;
-  i -= ranks_[rank_id].abs();
 
-  uint64_t word_id = rank_id * 4;
-  if (i < ranks_[rank_id].rels[1]) {
-    if (i >= ranks_[rank_id].rels[0]) {
-      word_id += 1;
-      i -= ranks_[rank_id].rels[0];
-    }
-  } else if (i < ranks_[rank_id].rels[2]) {
-    word_id += 2;
-    i -= ranks_[rank_id].rels[1];
-  } else {
-    word_id += 3;
-    i -= ranks_[rank_id].rels[2];
+  uint64_t size() const {
+    return sizeof(uint64_t) * words.size()
+      + sizeof(Rank) * ranks.size()
+      + sizeof(uint32_t) * selects.size();
   }
-  return (word_id * 64) + __builtin_ctzll(
-    _pdep_u64(1UL << i, ~words_[word_id]));
-}
+};
 
 struct Level {
   BitVector louds;
@@ -200,9 +189,9 @@ class TrieImpl {
 
 TrieImpl::TrieImpl()
   : levels_(2), n_keys_(0), n_nodes_(1), size_(0), last_key_() {
-  levels_[0].louds.add(1);
   levels_[0].louds.add(0);
-  levels_[1].louds.add(0);
+  levels_[0].louds.add(1);
+  levels_[1].louds.add(1);
   levels_[0].outs.add(0);
   levels_[0].labels.push_back(' ');
 }
@@ -223,8 +212,8 @@ void TrieImpl::add(const string &key) {
     Level &level = levels_[i + 1];
     uint8_t byte = key[i];
     if ((i == last_key_.length()) || (byte != level.labels.back())) {
-      level.louds.set(levels_[i + 1].louds.n_bits() - 1, 1);
-      level.louds.add(0);
+      level.louds.set(levels_[i + 1].louds.n_bits - 1, 0);
+      level.louds.add(1);
       level.outs.add(0);
       level.labels.push_back(key[i]);
       ++n_nodes_;
@@ -233,15 +222,15 @@ void TrieImpl::add(const string &key) {
   }
   for (++i; i < key.length(); ++i) {
     Level &level = levels_[i + 1];
-    level.louds.add(1);
     level.louds.add(0);
+    level.louds.add(1);
     level.outs.add(0);
     level.labels.push_back(key[i]);
     ++n_nodes_;
   }
-  levels_[key.length() + 1].louds.add(0);
+  levels_[key.length() + 1].louds.add(1);
   ++levels_[key.length() + 1].offset;
-  levels_[key.length()].outs.set(levels_[key.length()].outs.n_bits() - 1, 1);
+  levels_[key.length()].outs.set(levels_[key.length()].outs.n_bits - 1, 1);
   ++n_keys_;
   last_key_ = key;
 }
@@ -273,7 +262,7 @@ int64_t TrieImpl::lookup(const string &query) const {
       node_id = 0;
     }
     for (uint8_t byte = query[i]; ; ++node_id, ++rank) {
-      if (!level.louds.get(node_id) || level.labels[rank] > byte) {
+      if (level.louds.get(node_id) || level.labels[rank] > byte) {
         return -1;
       }
       if (level.labels[rank] == byte) {
@@ -285,7 +274,7 @@ int64_t TrieImpl::lookup(const string &query) const {
   if (!level.outs.get(rank)) {
     return false;
   }
-  return level.offset + rank - level.outs.rank(rank);
+  return level.offset + level.outs.rank(rank);
 }
 
 Trie::Trie() : impl_(new TrieImpl) {}
