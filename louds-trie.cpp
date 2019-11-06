@@ -261,13 +261,45 @@ int64_t TrieImpl::lookup(const string &query) const {
     } else {
       node_pos = 0;
     }
-    for (uint8_t byte = query[i]; ; ++node_pos, ++node_id) {
-      if (level.louds.get(node_pos) || level.labels[node_id] > byte) {
-        return -1;
+
+    // Linear search implementation
+    // for (uint8_t byte = query[i]; ; ++node_pos, ++node_id) {
+    //   if (level.louds.get(node_pos) || level.labels[node_id] > byte) {
+    //     return -1;
+    //   }
+    //   if (level.labels[node_id] == byte) {
+    //     break;
+    //   }
+    // }
+
+    // Binary search implementation
+    uint64_t end = node_pos;
+    uint64_t word = level.louds.words[end / 64] >> (end % 64);
+    if (word == 0) {
+      end += 64 - (end % 64);
+      word = level.louds.words[end / 64];
+      while (word == 0) {
+        end += 64;
+        word = level.louds.words[end / 64];
       }
-      if (level.labels[node_id] == byte) {
+    }
+    end += __builtin_ctzll(word);
+    uint64_t begin = node_id;
+    end = begin + end - node_pos;
+
+    uint8_t byte = query[i];
+    while (begin < end) {
+      node_id = (begin + end) / 2;
+      if (byte < level.labels[node_id]) {
+        end = node_id;
+      } else if (byte > level.labels[node_id]) {
+        begin = node_id + 1;
+      } else {
         break;
       }
+    }
+    if (begin >= end) {
+      return -1;
     }
   }
   const Level &level = levels_[query.length()];
