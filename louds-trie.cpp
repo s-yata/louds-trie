@@ -2,6 +2,7 @@
 
 #ifdef _MSC_VER
  #include <intrin.h>
+ #include <immintrin.h>
 #else  // _MSC_VER
  #include <x86intrin.h>
 #endif  // _MSC_VER
@@ -17,6 +18,14 @@ uint64_t Popcnt(uint64_t x) {
   return __popcnt64(x);
 #else  // _MSC_VER
   return __builtin_popcountll(x);
+#endif  // _MSC_VER
+}
+
+uint64_t Ctz(uint64_t x) {
+#ifdef _MSC_VER
+  return _tzcnt_u64(x);
+#else  // _MSC_VER
+  return __builtin_ctzll(x);
 #endif  // _MSC_VER
 }
 
@@ -80,7 +89,7 @@ struct BitVector {
         if (((n_ones + 255) / 256) != ((new_n_ones + 255) / 256)) {
           uint64_t count = n_ones;
           while (word != 0) {
-            uint64_t pos = __builtin_ctzll(word);
+            uint64_t pos = Ctz(word);
             if (count % 256 == 0) {
               selects.push_back(((word_id * 64) + pos) / 256);
               break;
@@ -144,8 +153,7 @@ struct BitVector {
       word_id += 3;
       i -= ranks[rank_id].rels[2];
     }
-    return (word_id * 64) + __builtin_ctzll(
-      _pdep_u64(1UL << i, words[word_id]));
+    return (word_id * 64) + Ctz(_pdep_u64(1UL << i, words[word_id]));
   }
 
   uint64_t size() const {
@@ -295,7 +303,7 @@ int64_t TrieImpl::lookup(const string &query) const {
         word = level.louds.words[end / 64];
       }
     }
-    end += __builtin_ctzll(word);
+    end += Ctz(word);
     uint64_t begin = node_id;
     end = begin + end - node_pos;
 
