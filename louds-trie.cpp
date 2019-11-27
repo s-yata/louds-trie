@@ -1,12 +1,24 @@
 #include "louds-trie.hpp"
 
-#include <x86intrin.h>
+#ifdef _MSC_VER
+ #include <intrin.h>
+#else  // _MSC_VER
+ #include <x86intrin.h>
+#endif  // _MSC_VER
 
 #include <cassert>
 #include <vector>
 
 namespace louds {
 namespace {
+
+uint64_t Popcnt(uint64_t x) {
+#ifdef _MSC_VER
+  return __popcnt64(x);
+#else  // _MSC_VER
+  return __builtin_popcountll(x);
+#endif  // _MSC_VER
+}
 
 struct BitVector {
   struct Rank {
@@ -63,7 +75,7 @@ struct BitVector {
 
         uint64_t word_id = (block_id * 4) + j;
         uint64_t word = words[word_id];
-        uint64_t n_pops = __builtin_popcountll(word);
+        uint64_t n_pops = Popcnt(word);
         uint64_t new_n_ones = n_ones + n_pops;
         if (((n_ones + 255) / 256) != ((new_n_ones + 255) / 256)) {
           uint64_t count = n_ones;
@@ -94,7 +106,7 @@ struct BitVector {
     if (rel_id != 0) {
       n += ranks[rank_id].rels[rel_id - 1];
     }
-    n += __builtin_popcountll(words[word_id] & ((1UL << bit_id) - 1));
+    n += Popcnt(words[word_id] & ((1UL << bit_id) - 1));
     return n;
   }
   // select returns the position of the (i+1)-th 1-bit.
